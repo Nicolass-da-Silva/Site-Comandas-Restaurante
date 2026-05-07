@@ -1,7 +1,10 @@
-// Página: Detalhes da Mesa
+// DETALHES DA MESA
+// Exibe itens da mesa com opções de adicionar/remover itens e fechar/deletar mesa
+
 function renderTableDetailPage(tableId) {
   const order = data.TableOrder.get(tableId);
   
+  // Se a mesa não existe, mostra mensagem
   if (!order) {
     return {
       html: `
@@ -40,6 +43,12 @@ function renderTableDetailPage(tableId) {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
           </svg>
           Fechar Mesa
+        </button>
+        <button id="btnDeleteTable" class="bg-slate-300 hover:bg-slate-400 text-slate-900 font-medium py-2 px-6 rounded-lg flex items-center gap-2" title="Deletar esta mesa">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+          </svg>
+          Deletar
         </button>
       </div>
 
@@ -86,6 +95,7 @@ function renderTableDetailPage(tableId) {
           </div>
         </div>
 
+        <!-- Resumo e opções de pagamento -->
         <div class="lg:col-span-1">
           <div class="bg-white rounded-lg border border-slate-200 p-6 sticky top-24">
             <h3 class="text-lg font-bold text-slate-900 mb-4">Resumo</h3>
@@ -121,16 +131,19 @@ function renderTableDetailPage(tableId) {
       const btnAddItem = document.getElementById('btnAddItem');
       const btnAddItemEmpty = document.getElementById('btnAddItemEmpty');
       const btnCloseTable = document.getElementById('btnCloseTable');
+      const btnDeleteTable = document.getElementById('btnDeleteTable');
       const btnPayTable = document.getElementById('btnPayTable');
 
       if (btnAddItem) btnAddItem.addEventListener('click', () => showAddItemDialog(tableId, allMenuItems));
       if (btnAddItemEmpty) btnAddItemEmpty.addEventListener('click', () => showAddItemDialog(tableId, allMenuItems));
       if (btnCloseTable) btnCloseTable.addEventListener('click', () => closeTableConfirm(tableId));
+      if (btnDeleteTable) btnDeleteTable.addEventListener('click', () => deleteTableConfirm(tableId));
       if (btnPayTable) btnPayTable.addEventListener('click', () => payTableConfirm(tableId));
     }
   };
 }
 
+// Calcula o tempo decorrido desde a abertura da mesa
 function getTimeSinceOpen(timestamp) {
   const now = Date.now();
   const diff = now - timestamp;
@@ -141,6 +154,7 @@ function getTimeSinceOpen(timestamp) {
   return `${minutes}min`;
 }
 
+// Abre diálogo para selecionar um item do cardápio
 function showAddItemDialog(tableId, allMenuItems) {
   const dialog = document.createElement('div');
   dialog.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
@@ -173,13 +187,14 @@ function showAddItemDialog(tableId, allMenuItems) {
   document.body.appendChild(dialog);
 }
 
+// Adiciona um item ao pedido da mesa
 function addItemToOrder(tableId, menuItemId, button) {
   const order = data.TableOrder.get(tableId);
   const menuItem = data.MenuItem.get(menuItemId);
   
   if (!order || !menuItem) return;
 
-  // Verificar se o item já existe
+  // Se o item já existe, incrementa quantidade
   const existingItem = order.items.find(i => i.id === menuItemId);
   
   if (existingItem) {
@@ -193,7 +208,7 @@ function addItemToOrder(tableId, menuItemId, button) {
     });
   }
 
-  // Recalcular total
+  // Recalcula o total
   order.total = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   
   data.TableOrder.update(tableId, {
@@ -201,7 +216,7 @@ function addItemToOrder(tableId, menuItemId, button) {
     total: order.total
   });
 
-  // Fechar dialog e re-render
+  // Fecha diálogo e re-renderiza página
   document.querySelector('.fixed').remove();
   const page = document.getElementById('app');
   const result = renderTableDetailPage(tableId);
@@ -209,6 +224,7 @@ function addItemToOrder(tableId, menuItemId, button) {
   if (result.afterRender) result.afterRender();
 }
 
+// Remove um item do pedido
 function removeItemFromOrder(tableId, itemIndex) {
   const order = data.TableOrder.get(tableId);
   if (!order) return;
@@ -221,13 +237,14 @@ function removeItemFromOrder(tableId, itemIndex) {
     total: order.total
   });
 
-  // Re-render
+  // Re-renderiza página
   const page = document.getElementById('app');
   const result = renderTableDetailPage(tableId);
   page.innerHTML = result.html;
   if (result.afterRender) result.afterRender();
 }
 
+// Fecha a mesa e marca como histórico
 function closeTableConfirm(tableId) {
   if (confirm('Tem certeza que deseja fechar esta mesa?')) {
     const order = data.TableOrder.get(tableId);
@@ -236,6 +253,49 @@ function closeTableConfirm(tableId) {
   }
 }
 
+// Abre diálogo para confirmar deleção da mesa
+function deleteTableConfirm(tableId) {
+  const order = data.TableOrder.get(tableId);
+  if (!order) return;
+
+  const dialog = document.createElement('div');
+  dialog.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+  dialog.innerHTML = `
+    <div class="bg-white rounded-lg p-6 w-96 shadow-xl">
+      <h2 class="text-xl font-bold mb-2 text-slate-900">Deletar Mesa?</h2>
+      <p class="text-slate-600 mb-6">
+        Tem certeza que deseja deletar a <strong>Mesa ${order.table_number}</strong>? 
+        Esta ação não pode ser desfeita.
+      </p>
+      ${order.items && order.items.length > 0 ? `
+        <div class="bg-red-50 border border-red-200 rounded-lg p-3 mb-6">
+          <p class="text-sm text-red-800">
+            <strong>Atenção:</strong> Esta mesa possui ${order.items.length} item(ns) adicionado(s). Ao deletar, esses items serão perdidos.
+          </p>
+        </div>
+      ` : ''}
+      <div class="flex gap-3 justify-end">
+        <button onclick="this.closest('.fixed').remove()" class="px-4 py-2 border border-slate-300 rounded-lg text-slate-900 hover:bg-slate-50 transition font-medium">
+          Cancelar
+        </button>
+        <button id="btnConfirmDelete" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition font-medium">
+          Deletar
+        </button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(dialog);
+
+  // Confirma a deletação
+  document.getElementById('btnConfirmDelete').addEventListener('click', () => {
+    data.TableOrder.delete(tableId);
+    dialog.remove();
+    navigateTo('/');
+  });
+}
+
+// Processa o pagamento da mesa
 function payTableConfirm(tableId) {
   const order = data.TableOrder.get(tableId);
   if (order.items.length === 0) {

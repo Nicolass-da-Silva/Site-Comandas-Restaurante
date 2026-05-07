@@ -1,4 +1,7 @@
-// Página: Cardápio
+// CARDÁPIO
+// Exibe itens do menu agrupados por categoria com opções de editar e deletar
+
+// Mapeamento de categorias
 const CATEGORY_LABELS = {
   lanches: 'Lanches',
   bebidas: 'Bebidas',
@@ -8,6 +11,7 @@ const CATEGORY_LABELS = {
 };
 
 function renderMenuPage() {
+  // Busca todos os itens ordenados por categoria
   const items = data.MenuItem.list('category');
   
   let html = `
@@ -28,6 +32,7 @@ function renderMenuPage() {
       </div>
   `;
 
+  // Se não há itens, mostra mensagem vazia
   if (items.length === 0) {
     html += `
       <div class="flex flex-col items-center justify-center py-20 text-center">
@@ -43,7 +48,7 @@ function renderMenuPage() {
       </div>
     `;
   } else {
-    // Agrupar por categoria
+    // Agrupa itens por categoria
     const grouped = items.reduce((acc, item) => {
       const cat = item.category || 'outros';
       if (!acc[cat]) acc[cat] = [];
@@ -51,6 +56,7 @@ function renderMenuPage() {
       return acc;
     }, {});
 
+    // Renderiza cada categoria com seus itens
     Object.keys(grouped).forEach(cat => {
       html += `
         <div class="mb-8">
@@ -98,6 +104,7 @@ function renderMenuPage() {
   };
 }
 
+// Abre diálogo para adicionar ou editar um item
 function showMenuItemForm(itemId = null) {
   const item = itemId ? data.MenuItem.get(itemId) : null;
   const isEdit = !!item;
@@ -142,6 +149,7 @@ function showMenuItemForm(itemId = null) {
   
   document.body.appendChild(dialog);
 
+  // Salva o item novo ou atualizado
   document.getElementById('btnSaveItem').addEventListener('click', () => {
     const name = document.getElementById('itemName').value;
     const price = parseFloat(document.getElementById('itemPrice').value);
@@ -159,7 +167,6 @@ function showMenuItemForm(itemId = null) {
     }
 
     dialog.remove();
-    // Re-render page
     const page = document.getElementById('app');
     const result = renderMenuPage();
     page.innerHTML = result.html;
@@ -167,14 +174,15 @@ function showMenuItemForm(itemId = null) {
   });
 }
 
+// Abre form de edição para um item
 function editMenuItem(id) {
   showMenuItemForm(id);
 }
 
+// Deleta um item do menu
 function deleteMenuItem(id) {
   if (confirm('Tem certeza que deseja deletar este item?')) {
     data.MenuItem.delete(id);
-    // Re-render page
     const page = document.getElementById('app');
     const result = renderMenuPage();
     page.innerHTML = result.html;

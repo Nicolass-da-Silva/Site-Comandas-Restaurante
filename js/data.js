@@ -1,8 +1,9 @@
-// Sistema de dados com localStorage.
-// Sem servicos externos.
+// BANCO DE DADOS
+// Gerencia dados usando localStorage (sem servidor externo)
 
 const storageKey = (name) => `sitecomanda:${name}`;
 
+// Converte string JSON em objeto ou retorna valor padrão
 const readJSON = (raw, fallback) => {
   try {
     return raw ? JSON.parse(raw) : fallback;
@@ -11,12 +12,15 @@ const readJSON = (raw, fallback) => {
   }
 };
 
+// Lê dados do localStorage
 const read = (key) => readJSON(localStorage.getItem(storageKey(key)), []);
 
+// Escreve dados no localStorage
 const write = (key, data) => {
   localStorage.setItem(storageKey(key), JSON.stringify(data));
 };
 
+// Dados padrão do cardápio
 const defaultMenuItems = [
   { id: 'm1', name: 'Coxinha', price: 8, category: 'lanches', active: true },
   { id: 'm2', name: 'Refresco', price: 5, category: 'bebidas', active: true },
@@ -31,6 +35,7 @@ const defaultMenuItems = [
   { id: 'm11', name: 'Água', price: 3.5, category: 'bebidas', active: true },
 ];
 
+// Dados padrão de pedidos para exemplo
 const defaultOrders = () => {
   const hoje = new Date();
   const ontem = new Date(hoje.getTime() - 24 * 60 * 60 * 1000);
@@ -99,9 +104,8 @@ const defaultOrders = () => {
   ];
 };
 
-// Inicializar dados padrão
+// Carrega dados padrão se não existirem no localStorage
 function initializeData() {
-  // Limpa residuos do recurso antigo de backup.
   localStorage.removeItem(storageKey('backupSnapshots'));
   localStorage.removeItem(storageKey('lastBackupAt'));
 
@@ -117,10 +121,12 @@ function initializeData() {
   }
 }
 
+// Verifica se um item tem todos os campos da query
 const matchQuery = (item, query = {}) => {
   return Object.keys(query).every((k) => item[k] === query[k]);
 };
 
+// Ordena um array por um campo
 const byField = (arr, field) => {
   if (!field) return arr;
   const desc = field.startsWith('-');
@@ -128,9 +134,8 @@ const byField = (arr, field) => {
   return arr.slice().sort((a, b) => (a[f] > b[f] ? (desc ? -1 : 1) : a[f] < b[f] ? (desc ? 1 : -1) : 0));
 };
 
-// API de dados
+// API de dados - Método CRUD para itens de menu e pedidos
 const data = {
-  // Menu Items
   MenuItem: {
     list(sortField) {
       const items = read('menuItems');
@@ -166,7 +171,6 @@ const data = {
     }
   },
 
-  // Table Orders
   TableOrder: {
     filter(query = {}, sortField) {
       const items = read('tableOrders').filter((i) => matchQuery(i, query));
@@ -204,7 +208,7 @@ const data = {
     }
   },
 
-  // Auth
+  // Autenticação simples (mock)
   auth: {
     getUser() {
       const token = localStorage.getItem(storageKey('token'));
@@ -218,8 +222,56 @@ const data = {
   },
 };
 
-// Inicializar dados
+// Exporta o estado atual (menu + pedidos) pronto para download
+data.exportBackup = function() {
+  return {
+    menuItems: read('menuItems'),
+    tableOrders: read('tableOrders'),
+    user: readJSON(localStorage.getItem(storageKey('user')), null),
+    token: localStorage.getItem(storageKey('token'))
+  };
+};
+
+// Importa um backup (objeto) no storage. Por padrão faz merge para preservar histórico.
+data.importBackup = function(backup = {}, options = {}) {
+  const merge = options.merge !== false; // default true
+
+  // Importar menuItems
+  if (Array.isArray(backup.menuItems)) {
+    const existingMenu = read('menuItems');
+    if (merge) {
+      const ids = new Set(existingMenu.map(i => i.id));
+      backup.menuItems.forEach(i => {
+        if (!ids.has(i.id)) existingMenu.push(i);
+      });
+      write('menuItems', existingMenu);
+    } else {
+      write('menuItems', backup.menuItems);
+    }
+  }
+
+  // Importar tableOrders (preservar histórico)
+  if (Array.isArray(backup.tableOrders)) {
+    const existingOrders = read('tableOrders');
+    if (merge) {
+      const ids = new Set(existingOrders.map(o => o.id));
+      backup.tableOrders.forEach(o => {
+        if (!ids.has(o.id)) existingOrders.push(o);
+      });
+      write('tableOrders', existingOrders);
+    } else {
+      write('tableOrders', backup.tableOrders);
+    }
+  }
+
+  // Restaurar user/token se presentes
+  if (backup.user) localStorage.setItem(storageKey('user'), JSON.stringify(backup.user));
+  if (backup.token) localStorage.setItem(storageKey('token'), backup.token);
+
+  return true;
+};
+
+// Inicializar dados e expor API
 initializeData();
 
-// Exportar
 window.data = data;
