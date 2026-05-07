@@ -78,11 +78,16 @@ function renderTableDetailPage(tableId) {
                   <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                     <div class="flex-1">
                       <p class="font-medium text-slate-900">${item.name}</p>
-                      <p class="text-sm text-slate-600">R$ ${item.price.toFixed(2)} x ${item.quantity}</p>
+                        <p class="text-sm text-slate-600">R$ ${item.price.toFixed(2)} x ${item.quantity}</p>
                     </div>
                     <div class="flex items-center gap-3">
-                      <p class="font-bold text-slate-900">R$ ${(item.price * item.quantity).toFixed(2)}</p>
-                      <button onclick="removeItemFromOrder('${tableId}', ${idx})" class="text-red-600 hover:text-red-700 p-1">
+                        <div class="flex items-center gap-2">
+                          <button class="px-2 py-1 bg-slate-100 rounded" onclick="changeOrderItemQuantity('${tableId}', ${idx}, -1)">-</button>
+                          <span class="text-sm text-slate-700">${item.quantity}</span>
+                          <button class="px-2 py-1 bg-slate-100 rounded" onclick="changeOrderItemQuantity('${tableId}', ${idx}, 1)">+</button>
+                        </div>
+                        <p class="font-bold text-slate-900">R$ ${(item.price * item.quantity).toFixed(2)}</p>
+                        <button onclick="removeItemFromOrder('${tableId}', ${idx})" class="text-red-600 hover:text-red-700 p-1">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                         </svg>
@@ -158,24 +163,38 @@ function getTimeSinceOpen(timestamp) {
 function showAddItemDialog(tableId, allMenuItems) {
   const dialog = document.createElement('div');
   dialog.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+  // Agrupa categorias e renderiza dropdown para filtragem + controle de quantidade por item
+  const categories = Array.from(new Set(allMenuItems.map(i => i.category || 'outros')));
+
   dialog.innerHTML = `
-    <div class="bg-white rounded-lg p-6 w-96 shadow-xl max-h-96 overflow-y-auto">
+    <div class="bg-white rounded-lg p-8 w-11/12 max-w-3xl shadow-xl max-h-[80vh] overflow-y-auto">
       <h2 class="text-xl font-bold mb-4 text-slate-900">Adicionar Item</h2>
-      
-      <div class="space-y-2 mb-4">
+      <div class="mb-3">
+        <label class="text-sm text-slate-600">Categoria</label>
+        <select id="dialogCategorySelect" onchange="filterDialogByCategory(this.value)" class="w-full px-3 py-2 border border-slate-300 rounded-lg mt-1">
+          <option value="all">Todas</option>
+          ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
+        </select>
+      </div>
+      <div id="dialogItems" class="space-y-2 mb-4">
         ${allMenuItems.map(item => `
-          <button onclick="addItemToOrder('${tableId}', '${item.id}', this)" class="w-full text-left px-3 py-3 border border-slate-300 rounded-lg hover:bg-blue-50 hover:border-blue-400 transition" data-item-id="${item.id}" data-item-name="${item.name}" data-item-price="${item.price}">
-            <div class="flex justify-between items-center">
-              <div>
-                <p class="font-medium text-slate-900">${item.name}</p>
-                <p class="text-sm text-slate-600">${item.category}</p>
+          <div class="dialog-item" data-category="${item.category}">
+            <div class="flex items-center gap-4 py-3 border-b border-slate-100">
+              <div class="flex-1">
+                <p class="text-lg font-semibold text-slate-900">${item.name}</p>
+                <p class="text-sm text-slate-600 mt-1">${item.category}</p>
               </div>
-              <p class="font-bold text-slate-900">R$ ${item.price.toFixed(2)}</p>
+              <div class="flex items-center gap-3">
+                <button class="px-3 py-1 bg-slate-100 rounded text-lg" onclick="changeDialogQty(this, -1)">-</button>
+                <span class="dialog-qty px-3 text-base font-medium">1</span>
+                <button class="px-3 py-1 bg-slate-100 rounded text-lg" onclick="changeDialogQty(this, 1)">+</button>
+                <button onclick="addItemToOrder('${tableId}', '${item.id}', this, parseInt(this.closest(\'.dialog-item\').querySelector('.dialog-qty').innerText || '1'))" class="ml-4 px-4 py-2 bg-blue-600 text-white rounded">Adicionar</button>
+                <p class="font-bold text-slate-900 ml-4">R$ ${item.price.toFixed(2)}</p>
+              </div>
             </div>
-          </button>
+          </div>
         `).join('')}
       </div>
-
       <div class="flex gap-3 justify-end">
         <button onclick="this.closest('.fixed').remove()" class="px-4 py-2 border border-slate-300 rounded-lg text-slate-900 hover:bg-slate-50 transition font-medium">
           Fechar
@@ -187,24 +206,46 @@ function showAddItemDialog(tableId, allMenuItems) {
   document.body.appendChild(dialog);
 }
 
+// Filtra itens no diálogo por categoria
+function filterDialogByCategory(category) {
+  const container = document.getElementById('dialogItems');
+  if (!container) return;
+  Array.from(container.querySelectorAll('.dialog-item')).forEach(el => {
+    const cat = el.dataset.category || 'outros';
+    el.style.display = (category === 'all' || category === cat) ? '' : 'none';
+  });
+}
+
+// Aumenta/diminui quantidade exibida no diálogo
+function changeDialogQty(button, delta) {
+  const item = button.closest('.dialog-item');
+  if (!item) return;
+  const span = item.querySelector('.dialog-qty');
+  let qty = parseInt(span.innerText || '1');
+  qty = Math.max(1, qty + delta);
+  span.innerText = qty;
+}
+
 // Adiciona um item ao pedido da mesa
-function addItemToOrder(tableId, menuItemId, button) {
+function addItemToOrder(tableId, menuItemId, button, quantity = 1) {
   const order = data.TableOrder.get(tableId);
   const menuItem = data.MenuItem.get(menuItemId);
   
   if (!order || !menuItem) return;
 
+  quantity = parseInt(quantity) || 1;
+
   // Se o item já existe, incrementa quantidade
   const existingItem = order.items.find(i => i.id === menuItemId);
   
   if (existingItem) {
-    existingItem.quantity = (existingItem.quantity || 1) + 1;
+    existingItem.quantity = (existingItem.quantity || 1) + quantity;
   } else {
     order.items.push({
       id: menuItemId,
       name: menuItem.name,
       price: menuItem.price,
-      quantity: 1
+      quantity: quantity
     });
   }
 
@@ -217,7 +258,27 @@ function addItemToOrder(tableId, menuItemId, button) {
   });
 
   // Fecha diálogo e re-renderiza página
-  document.querySelector('.fixed').remove();
+  const fixed = document.querySelector('.fixed');
+  if (fixed) fixed.remove();
+  const page = document.getElementById('app');
+  const result = renderTableDetailPage(tableId);
+  page.innerHTML = result.html;
+  if (result.afterRender) result.afterRender();
+}
+
+// Muda a quantidade de um item já adicionado na comanda
+function changeOrderItemQuantity(tableId, itemIndex, delta) {
+  const order = data.TableOrder.get(tableId);
+  if (!order) return;
+  const item = order.items[itemIndex];
+  if (!item) return;
+  item.quantity = Math.max(0, (item.quantity || 1) + delta);
+  if (item.quantity === 0) {
+    order.items.splice(itemIndex, 1);
+  }
+  order.total = order.items.reduce((sum, it) => sum + (it.price * it.quantity), 0);
+  data.TableOrder.update(tableId, { items: order.items, total: order.total });
+
   const page = document.getElementById('app');
   const result = renderTableDetailPage(tableId);
   page.innerHTML = result.html;

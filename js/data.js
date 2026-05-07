@@ -108,9 +108,39 @@ const defaultOrders = () => {
 function initializeData() {
   localStorage.removeItem(storageKey('backupSnapshots'));
   localStorage.removeItem(storageKey('lastBackupAt'));
+  // Carrega menu existente (pode ser vazio)
+  let existingMenu = read('menuItems');
+  if (!Array.isArray(existingMenu) || existingMenu.length === 0) {
+    existingMenu = defaultMenuItems.slice();
+  }
 
-  if (!localStorage.getItem(storageKey('menuItems'))) {
-    localStorage.setItem(storageKey('menuItems'), JSON.stringify(defaultMenuItems));
+  // Se o desenvolvedor forneceu `window.customMenuItems`, mescla-os sempre (sem sobrescrever itens já salvos)
+  const custom = Array.isArray(window.customMenuItems) ? window.customMenuItems : [];
+  if (custom.length > 0) {
+    const normalizedCustom = custom.map((it, idx) => ({
+      id: it.id || `cm${Date.now()}${idx}`,
+      name: it.name || `Item ${idx}`,
+      price: typeof it.price === 'number' ? it.price : 0,
+      category: it.category || 'outros',
+      active: it.active !== false
+    }));
+
+    const existingIds = new Set(existingMenu.map(i => i.id));
+    const existingNames = new Set(existingMenu.map(i => (i.name || '').toLowerCase()));
+
+    normalizedCustom.forEach(ci => {
+      // adiciona apenas se não houver item com mesmo id ou mesmo nome
+      if (!existingIds.has(ci.id) && !existingNames.has((ci.name || '').toLowerCase())) {
+        existingMenu.push(ci);
+      }
+    });
+
+    localStorage.setItem(storageKey('menuItems'), JSON.stringify(existingMenu));
+  } else {
+    // garante que haja algo gravado
+    if (!localStorage.getItem(storageKey('menuItems'))) {
+      localStorage.setItem(storageKey('menuItems'), JSON.stringify(existingMenu));
+    }
   }
   if (!localStorage.getItem(storageKey('tableOrders'))) {
     localStorage.setItem(storageKey('tableOrders'), JSON.stringify(defaultOrders()));
