@@ -13,8 +13,51 @@
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
+    :root {
+      --theme-bg: #f5efe7;
+      --theme-surface: #fffaf4;
+      --theme-surface-2: #f9f1e8;
+      --theme-border: rgba(122, 48, 18, 0.14);
+      --theme-text: #241813;
+      --theme-muted: #6f5a4d;
+      --theme-primary: #e11d18;
+      --theme-primary-dark: #b91c1c;
+      --theme-accent: #d97706;
+      --theme-accent-soft: rgba(217, 119, 6, 0.12);
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(225, 29, 24, 0.09), transparent 30%),
+        radial-gradient(circle at top right, rgba(217, 119, 6, 0.09), transparent 26%),
+        linear-gradient(180deg, #fbf5ee 0%, #f4eadf 100%);
+      color: var(--theme-text);
+      min-height: 100vh;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.4), transparent 24%),
+        radial-gradient(circle at 50% 0%, rgba(225, 29, 24, 0.05), transparent 30%);
+      z-index: 0;
+    }
+
+    nav,
+    main {
+      position: relative;
+      z-index: 1;
+    }
+
+    nav {
+      background: rgba(255, 250, 244, 0.88) !important;
+      border-color: rgba(122, 48, 18, 0.12) !important;
+      box-shadow: 0 8px 24px rgba(71, 32, 16, 0.08);
+      backdrop-filter: blur(12px);
     }
 
     .page-transition {
@@ -31,8 +74,153 @@
       }
     }
 
+    .nav-link {
+      border-bottom: 2px solid transparent;
+    }
+
     .nav-link.active {
-      @apply border-b-2 border-blue-600 text-blue-600;
+      border-bottom-color: var(--theme-accent);
+      color: var(--theme-accent);
+    }
+
+    .bg-white {
+      background-color: var(--theme-surface) !important;
+      color: var(--theme-text) !important;
+    }
+
+    .bg-slate-50 {
+      background-color: #fbf4ec !important;
+    }
+
+    .bg-slate-100 {
+      background-color: #f3e7dc !important;
+    }
+
+    .bg-slate-200 {
+      background-color: #ead8ca !important;
+    }
+
+    .bg-slate-300 {
+      background-color: #d7bdaa !important;
+    }
+
+    .bg-slate-800 {
+      background-color: #4b3429 !important;
+    }
+
+    .bg-slate-900 {
+      background-color: #2a1c16 !important;
+    }
+
+    .text-slate-900 {
+      color: var(--theme-text) !important;
+    }
+
+    .text-slate-700 {
+      color: #4f3c31 !important;
+    }
+
+    .text-slate-600 {
+      color: var(--theme-muted) !important;
+    }
+
+    .text-slate-500 {
+      color: #8a6f5f !important;
+    }
+
+    .text-slate-400 {
+      color: #a58472 !important;
+    }
+
+    .border-slate-200 {
+      border-color: var(--theme-border) !important;
+    }
+
+    .border-slate-300 {
+      border-color: rgba(122, 48, 18, 0.22) !important;
+    }
+
+    .bg-blue-600,
+    .bg-blue-700 {
+      background-color: var(--theme-primary) !important;
+    }
+
+    .hover\:bg-blue-700:hover {
+      background-color: var(--theme-primary-dark) !important;
+    }
+
+    .text-blue-600,
+    .text-blue-700,
+    .text-blue-800 {
+      color: var(--theme-accent) !important;
+    }
+
+    .bg-blue-50,
+    .bg-blue-100 {
+      background-color: var(--theme-accent-soft) !important;
+    }
+
+    .border-blue-400 {
+      border-color: rgba(217, 119, 6, 0.48) !important;
+    }
+
+    .hover\:bg-blue-50:hover {
+      background-color: rgba(217, 119, 6, 0.14) !important;
+    }
+
+    .bg-green-600,
+    .bg-green-700 {
+      background-color: #15803d !important;
+    }
+
+    .hover\:bg-green-700:hover {
+      background-color: #166534 !important;
+    }
+
+    .text-green-600,
+    .text-green-700,
+    .text-green-800 {
+      color: #15803d !important;
+    }
+
+    .bg-green-50,
+    .bg-green-100 {
+      background-color: rgba(21, 128, 61, 0.08) !important;
+    }
+
+    .bg-orange-50,
+    .bg-orange-100 {
+      background-color: rgba(217, 119, 6, 0.1) !important;
+    }
+
+    .text-orange-600 {
+      color: #c2410c !important;
+    }
+
+    .border-orange-200 {
+      border-color: rgba(194, 65, 12, 0.18) !important;
+    }
+
+    .hover\:bg-slate-50:hover {
+      background-color: #f7efe5 !important;
+    }
+
+    .hover\:bg-slate-200:hover {
+      background-color: #ead8ca !important;
+    }
+
+    .hover\:bg-slate-300:hover {
+      background-color: #d8bea9 !important;
+    }
+
+    .hover\:text-slate-900:hover {
+      color: var(--theme-text) !important;
+    }
+
+    .shadow-md,
+    .shadow-lg,
+    .shadow-xl {
+      box-shadow: 0 10px 28px rgba(71, 32, 16, 0.08) !important;
     }
   </style>
 </head>
