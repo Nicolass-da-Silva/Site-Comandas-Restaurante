@@ -118,7 +118,7 @@ function showMenuItemForm(itemId = null) {
       <div class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-slate-900 mb-1">Nome</label>
-          <input type="text" id="itemName" placeholder="Ex: Coxinha" value="${item?.name || ''}" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900">
+          <input type="text" id="itemName" placeholder="Ex: Alterado" value="${item?.name || ''}" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900">
         </div>
         
         <div>

@@ -107,7 +107,7 @@ function showOpenTableDialog() {
     .map(o => o.table_number);
 
   // Define quais mesas estão disponíveis (1 a 10)
-  const allTables = Array.from({ length: 10 }, (_, i) => i + 1);
+  const allTables = Array.from({ length: 4 }, (_, i) => i + 1);
   const availableTables = allTables.filter(n => !existingTables.includes(n));
 
   let options = availableTables.map(t => `<option value="${t}">Mesa ${t}</option>`).join('');
