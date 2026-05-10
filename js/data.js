@@ -21,7 +21,7 @@ const read = (key) => readJSON(localStorage.getItem(storageKey(key)), []);
 function migrateLegacyStorageIfNeeded() {
   if (appMode !== 'private') return;
 
-  const keysToMigrate = ['menuItems', 'tableOrders', 'user', 'token', 'siteOpenDate', 'selectedHistoryDate'];
+  const keysToMigrate = ['menuItems', 'tableOrders', 'siteOpenDate', 'selectedHistoryDate'];
   keysToMigrate.forEach((key) => {
     const currentKey = storageKey(key);
     const legacyKey = legacyStorageKey(key);
@@ -332,13 +332,10 @@ const data = {
   // Autenticação simples (mock)
   auth: {
     getUser() {
-      const token = localStorage.getItem(storageKey('token'));
-      if (!token) return null;
-      const user = localStorage.getItem(storageKey('user'));
-      return user ? JSON.parse(user) : null;
+      return null;
     },
     isAuthenticated() {
-      return !!localStorage.getItem(storageKey('token'));
+      return false;
     }
   },
 };
@@ -348,8 +345,6 @@ data.exportBackup = function() {
   return {
     menuItems: read('menuItems'),
     tableOrders: read('tableOrders'),
-    user: readJSON(localStorage.getItem(storageKey('user')), null),
-    token: localStorage.getItem(storageKey('token'))
   };
 };
 
@@ -384,10 +379,6 @@ data.importBackup = function(backup = {}, options = {}) {
       write('tableOrders', backup.tableOrders);
     }
   }
-
-  // Restaurar user/token se presentes
-  if (backup.user) localStorage.setItem(storageKey('user'), JSON.stringify(backup.user));
-  if (backup.token) localStorage.setItem(storageKey('token'), backup.token);
 
   return true;
 };

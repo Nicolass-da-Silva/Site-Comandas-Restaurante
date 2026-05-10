@@ -10,15 +10,12 @@ function isNetlifyIdentityAvailable() {
 }
 
 function isAppAuthorized() {
-  if (data && data.auth && typeof data.auth.isAuthenticated === 'function') {
-    return data.auth.isAuthenticated();
-  }
-  return !!localStorage.getItem('sitecomanda:token');
+  return !!(isNetlifyIdentityAvailable() && window.netlifyIdentity.currentUser());
 }
 
 function getAuthenticatedUserLabel() {
-  const user = data && data.auth && typeof data.auth.getUser === 'function' ? data.auth.getUser() : null;
-  return user?.email || user?.name || 'Usuário autenticado';
+  const user = isNetlifyIdentityAvailable() ? window.netlifyIdentity.currentUser() : null;
+  return user?.email || user?.user_metadata?.full_name || 'Usuário autenticado';
 }
 
 function ensureAuthGate() {
@@ -113,8 +110,6 @@ function renderAuthBadge() {
       if (isNetlifyIdentityAvailable() && window.netlifyIdentity.currentUser()) {
         window.netlifyIdentity.logout();
       }
-      localStorage.removeItem('sitecomanda:token');
-      localStorage.removeItem('sitecomanda:user');
       authGateRendered = false;
       renderPage();
     });
@@ -126,34 +121,18 @@ function setupAuthListeners() {
   window.__siteComandaAuthListeners = true;
 
   window.netlifyIdentity.on('init', (user) => {
-    if (user) {
-      localStorage.setItem('sitecomanda:token', `netlify-\${user.id || 'user'}`);
-      localStorage.setItem('sitecomanda:user', JSON.stringify({
-        id: user.id || 'user',
-        name: user.user_metadata?.full_name || user.email || 'Usuário',
-        email: user.email || ''
-      }));
-    }
     authReady = true;
     authGateRendered = false;
     renderPage();
   });
 
   window.netlifyIdentity.on('login', (user) => {
-    localStorage.setItem('sitecomanda:token', `netlify-\${user.id || 'user'}`);
-    localStorage.setItem('sitecomanda:user', JSON.stringify({
-      id: user.id || 'user',
-      name: user.user_metadata?.full_name || user.email || 'Usuário',
-      email: user.email || ''
-    }));
     authReady = true;
     authGateRendered = false;
     renderPage();
   });
 
   window.netlifyIdentity.on('logout', () => {
-    localStorage.removeItem('sitecomanda:token');
-    localStorage.removeItem('sitecomanda:user');
     authReady = false;
     authGateRendered = false;
     renderPage();
@@ -177,15 +156,6 @@ function renderPage() {
   if (!authReady && isNetlifyIdentityAvailable()) {
     setupAuthListeners();
     window.netlifyIdentity.init();
-    const identityUser = window.netlifyIdentity.currentUser();
-    if (identityUser) {
-      localStorage.setItem('sitecomanda:token', `netlify-\${identityUser.id || 'user'}`);
-      localStorage.setItem('sitecomanda:user', JSON.stringify({
-        id: identityUser.id || 'user',
-        name: identityUser.user_metadata?.full_name || identityUser.email || 'Usuário',
-        email: identityUser.email || ''
-      }));
-    }
     authReady = true;
   }
 
