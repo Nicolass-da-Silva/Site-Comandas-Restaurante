@@ -157,7 +157,14 @@ function migrateOrdersToOpenDate(openDateISO) {
     const orders = read('tableOrders');
     if (!Array.isArray(orders) || orders.length === 0) return;
 
-    const openDate = new Date(openDateISO);
+    // Criar Date no horário local a partir de string ISO YYYY-MM-DD
+    let openDate;
+    if (typeof openDateISO === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(openDateISO)) {
+      const parts = openDateISO.split('-').map(Number);
+      openDate = new Date(parts[0], parts[1] - 1, parts[2]);
+    } else {
+      openDate = new Date(openDateISO);
+    }
     orders.forEach((o) => {
       const created = new Date(o.created_date);
       if (created < openDate) {
@@ -181,6 +188,39 @@ function migrateOrdersToOpenDate(openDateISO) {
       if (o.table_name === undefined) o.table_name = null;
     });
     write('tableOrders', orders);
+  } catch (e) {
+    // ignore
+  }
+}
+
+// Corrige migração anterior que pode ter criado registros com o dia anterior
+function fixMigratedDayIfNeeded(openDateISO) {
+  try {
+    const flagKey = storageKey('migrationFixAppliedV1');
+    if (localStorage.getItem(flagKey)) return; // já aplicado
+
+    if (typeof openDateISO !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(openDateISO)) return;
+    const parts = openDateISO.split('-').map(Number);
+    const openDateLocal = new Date(parts[0], parts[1] - 1, parts[2]);
+    const prevDay = new Date(openDateLocal.getFullYear(), openDateLocal.getMonth(), openDateLocal.getDate() - 1);
+
+    const orders = read('tableOrders');
+    let changed = false;
+    orders.forEach(o => {
+      const created = new Date(o.created_date);
+      if (created.getFullYear() === prevDay.getFullYear() && created.getMonth() === prevDay.getMonth() && created.getDate() === prevDay.getDate()) {
+        // adicionar 24h para created e closed
+        o.created_date = created.getTime() + 24 * 60 * 60 * 1000;
+        if (o.closed_date) o.closed_date = new Date(o.closed_date).getTime() + 24 * 60 * 60 * 1000;
+        // marca para evitar reprocessamento específico por item
+        o._migratedFixed = true;
+        changed = true;
+      }
+    });
+    if (changed) {
+      write('tableOrders', orders);
+    }
+    localStorage.setItem(flagKey, '1');
   } catch (e) {
     // ignore
   }
@@ -353,5 +393,7 @@ initializeData();
 // Migra pedidos com datas anteriores à data de abertura para o dia de abertura
 const openISO = localStorage.getItem(OPEN_DATE_KEY) || (new Date()).toISOString().slice(0,10);
 migrateOrdersToOpenDate(openISO);
+// Aplica correção única caso migração anterior tenha deslocado para dia anterior
+fixMigratedDayIfNeeded(openISO);
 
 window.data = data;
