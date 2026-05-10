@@ -3,7 +3,7 @@
 
 let currentRoute = '/';
 let authReady = false;
-let authGateRendered = false;
+let authStateResolved = false;
 let authLoginAutoOpened = false;
 
 function isNetlifyIdentityAvailable() {
@@ -23,14 +23,9 @@ function ensureAuthGate() {
   const app = document.getElementById('app');
   if (!app) return;
 
-  if (authGateRendered) return;
-  authGateRendered = true;
-
-  const identityReady = isNetlifyIdentityAvailable();
-  const hasAccess = isAppAuthorized();
-
-  if (hasAccess) {
+  if (isAppAuthorized()) {
     authReady = true;
+    authStateResolved = true;
     return;
   }
 
@@ -40,54 +35,20 @@ function ensureAuthGate() {
         <div class="flex items-center gap-3 mb-4">
           <div class="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-700 font-bold">M</div>
           <div>
-            <h2 class="text-2xl font-bold text-slate-900">Acesso restrito</h2>
-            <p class="text-sm text-slate-600">Somente usuários autorizados podem entrar</p>
+            <h2 class="text-2xl font-bold text-slate-900">Entrando no site</h2>
+            <p class="text-sm text-slate-600">Validando seu acesso autorizado</p>
           </div>
         </div>
 
         <div class="space-y-4 text-sm text-slate-700 mb-6">
-          <p>Este site foi bloqueado para acesso público. Para entrar, use um login autorizado pelo administrador.</p>
-          <p>\${identityReady ? 'O acesso está configurado via Netlify Identity e convites por e-mail.' : 'O Netlify Identity não foi encontrado. Ative o recurso no painel do Netlify para usar convites por e-mail.'}</p>
+          <p>Seu acesso está sendo verificado pelo Netlify Identity.</p>
+          <p>Se sua conta estiver autorizada, o site abrirá automaticamente sem pedir ação extra.</p>
         </div>
 
-        <div class="flex flex-col gap-3 sm:flex-row">
-          <button id="btnOpenLogin" class="px-4 py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition">Entrar</button>
-          <button id="btnRefreshAuth" class="px-4 py-3 rounded-lg border border-slate-300 text-slate-900 font-semibold hover:bg-slate-50 transition">Verificar acesso</button>
-        </div>
-
-        <p class="mt-4 text-xs text-slate-500">Se você quiser uma barreira forte, convide apenas os e-mails autorizados no Netlify e remova o acesso público do site.</p>
+        <p class="mt-4 text-xs text-slate-500">Apenas usuários convidados e autorizados podem continuar.</p>
       </div>
     </div>
   `;
-
-  const btnOpenLogin = document.getElementById('btnOpenLogin');
-  const btnRefreshAuth = document.getElementById('btnRefreshAuth');
-
-  if (btnOpenLogin) {
-    btnOpenLogin.addEventListener('click', () => {
-      if (!identityReady) {
-        alert('Ative o Netlify Identity no painel do Netlify para usar login por convite.');
-        return;
-      }
-      window.netlifyIdentity.open('login');
-    });
-  }
-
-  if (btnRefreshAuth) {
-    btnRefreshAuth.addEventListener('click', () => {
-      authGateRendered = false;
-      renderPage();
-    });
-  }
-
-  if (identityReady && !authLoginAutoOpened) {
-    authLoginAutoOpened = true;
-    setTimeout(() => {
-      if (!isAppAuthorized()) {
-        window.netlifyIdentity.open('login');
-      }
-    }, 0);
-  }
 }
 
 function renderAuthBadge() {
@@ -120,7 +81,7 @@ function renderAuthBadge() {
       if (isNetlifyIdentityAvailable() && window.netlifyIdentity.currentUser()) {
         window.netlifyIdentity.logout();
       }
-      authGateRendered = false;
+      authStateResolved = false;
       renderPage();
     });
   }
@@ -132,20 +93,20 @@ function setupAuthListeners() {
 
   window.netlifyIdentity.on('init', (user) => {
     authReady = true;
-    authGateRendered = false;
+    authStateResolved = true;
     renderPage();
   });
 
   window.netlifyIdentity.on('login', (user) => {
     authReady = true;
-    authGateRendered = false;
-    authLoginAutoOpened = true;
+    authStateResolved = true;
+    authLoginAutoOpened = false;
     renderPage();
   });
 
   window.netlifyIdentity.on('logout', () => {
     authReady = false;
-    authGateRendered = false;
+    authStateResolved = false;
     authLoginAutoOpened = false;
     renderPage();
   });
@@ -171,9 +132,33 @@ function renderPage() {
     authReady = true;
   }
 
+  if (isNetlifyIdentityAvailable() && !authStateResolved) {
+    const app = document.getElementById('app');
+    if (app) {
+      app.innerHTML = `
+        <div class="min-h-[70vh] flex items-center justify-center">
+          <div class="w-full max-w-xl bg-white rounded-2xl border border-slate-200 shadow-xl p-8 text-center">
+            <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-orange-100 text-orange-700 font-bold mb-4">M</div>
+            <h2 class="text-2xl font-bold text-slate-900 mb-2">Entrando no site</h2>
+            <p class="text-sm text-slate-600">Conferindo sua sessão autorizada no Netlify Identity</p>
+          </div>
+        </div>
+      `;
+    }
+    return;
+  }
+
   if (!isAppAuthorized()) {
     ensureAuthGate();
     renderAuthBadge();
+    if (isNetlifyIdentityAvailable() && !authLoginAutoOpened) {
+      authLoginAutoOpened = true;
+      setTimeout(() => {
+        if (!isAppAuthorized()) {
+          window.netlifyIdentity.open('login');
+        }
+      }, 0);
+    }
     return;
   }
 
