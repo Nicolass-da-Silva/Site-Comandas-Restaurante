@@ -29,8 +29,8 @@ function renderAccessDenied() {
     <div class="min-h-[70vh] flex items-center justify-center">
       <div class="w-full max-w-xl bg-white rounded-2xl border border-slate-200 shadow-xl p-8 text-center">
         <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-red-100 text-red-700 font-bold mb-4">!</div>
-        <h2 class="text-2xl font-bold text-slate-900 mb-2">Usuário não permitido</h2>
-        <p class="text-sm text-slate-600">Sua conta não está autorizada para este site.</p>
+        <h2 class="text-2xl font-bold text-slate-900 mb-2">Acesso negado</h2>
+        <p class="text-sm text-slate-600">Este email não está autorizado neste site.</p>
       </div>
     </div>
   `;
@@ -126,20 +126,8 @@ function renderAuthBadge() {
   badge.innerHTML = `
     <div class="flex items-center gap-2 text-sm text-slate-600">
       <span class="px-2 py-1 rounded-full bg-green-100 text-green-700 font-medium">\${getAuthenticatedUserLabel()}</span>
-      <button id="btnLogout" class="px-3 py-1 rounded-lg border border-slate-300 text-slate-900 hover:bg-slate-50 transition">Sair</button>
     </div>
   `;
-
-  const btnLogout = document.getElementById('btnLogout');
-  if (btnLogout) {
-    btnLogout.addEventListener('click', () => {
-      if (isNetlifyIdentityAvailable() && window.netlifyIdentity.currentUser()) {
-        window.netlifyIdentity.logout();
-      }
-      authStateResolved = false;
-      renderPage();
-    });
-  }
 }
 
 function setupAuthListeners() {
