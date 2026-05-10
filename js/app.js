@@ -7,6 +7,21 @@ let authStateResolved = false;
 let authRedirectInProgress = false;
 let authAccessDenied = false;
 
+// Verificar se há estado quebrado ao carregar
+function resetBrokenAuthState() {
+  // Se está mostrando "acesso negado" mas o Netlify Identity existe e não tem user, limpar localStorage de auth
+  if (!isAppAuthorized() && isNetlifyIdentityAvailable()) {
+    // Limpar qualquer cookie/storage de autenticação que possa estar quebrado
+    Object.keys(localStorage).forEach(k => {
+      if (k.includes('nf_') || k.includes('auth') || k.includes('identity') || k.includes('gotrue')) {
+        try {
+          localStorage.removeItem(k);
+        } catch (e) {}
+      }
+    });
+  }
+}
+
 function isNetlifyIdentityAvailable() {
   return typeof window.netlifyIdentity !== 'undefined';
 }
@@ -149,9 +164,19 @@ function setupAuthListeners() {
   });
 
   window.netlifyIdentity.on('logout', () => {
+    // Limpar estado de autenticação
     authReady = false;
     authStateResolved = false;
     authAccessDenied = false;
+    authRedirectInProgress = false;
+    
+    // Limpar localStorage de autenticação que possa ficar preso
+    Object.keys(localStorage).forEach(k => {
+      if (k.includes('nf_') || k.includes('auth') || k.includes('identity')) {
+        localStorage.removeItem(k);
+      }
+    });
+    
     renderPage();
   });
 
@@ -185,23 +210,36 @@ function getCurrentRoute() {
 
 // Renderiza a página baseado na rota
 function renderPage() {
+  // Resetar estado quebrado se necessário
+  resetBrokenAuthState();
+
   if (!authReady && isNetlifyIdentityAvailable()) {
     setupAuthListeners();
     window.netlifyIdentity.init();
     authReady = true;
   }
 
-  if (isAccessDeniedHash() || authAccessDenied) {
-    renderAccessDenied();
+  // Detectar se há estado de logout persistente e limpar
+  if (isAccessDeniedHash()) {
+    // Limpar hash de erro
+    window.location.hash = '';
+    authAccessDenied = false;
+    authStateResolved = false;
+    redirectToGoogleLogin();
     return;
   }
 
-  if (!isAppAuthorized()) {
-    if (authAccessDenied) {
+  if (authAccessDenied) {
+    // Se estava em acesso negado mas agora tem usuário, liberar
+    if (isAppAuthorized()) {
+      authAccessDenied = false;
+    } else {
       renderAccessDenied();
-      renderAuthBadge();
       return;
     }
+  }
+
+  if (!isAppAuthorized()) {
     ensureAuthGate();
     renderAuthBadge();
     redirectToGoogleLogin();
