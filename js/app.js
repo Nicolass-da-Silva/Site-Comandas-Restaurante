@@ -1,138 +1,159 @@
 // APLICAÇÃO PRINCIPAL
-// Responsável pelo roteamento e renderização das páginas
+// Responsável pelo roteamento e pela limitação de acesso por email
 
 let currentRoute = '/';
-let authReady = false;
-let authStateResolved = false;
-let authRedirectInProgress = false;
-let authAccessDenied = false;
-let authRetryCount = 0;
-const MAX_AUTH_RETRIES = 3;
+const AUTH_STORAGE_KEY = 'sitecomanda:private:authorizedEmail';
+const AUTH_STATE_KEY = 'sitecomanda:private:accessState';
 
-function loadNetlifyIdentityWidget() {
-  return new Promise((resolve, reject) => {
-    if (isNetlifyIdentityAvailable()) {
-      resolve();
-      return;
-    }
-
-    if (document.querySelector('script[data-netlify-identity-widget]')) {
-      const checkReady = () => {
-        if (isNetlifyIdentityAvailable()) {
-          resolve();
-        } else {
-          setTimeout(checkReady, 100);
-        }
-      };
-      checkReady();
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = 'https://identity.netlify.com/v1/netlify-identity-widget.js';
-    script.async = true;
-    script.dataset.netlifyIdentityWidget = 'true';
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Falha ao carregar Netlify Identity'));
-    document.head.appendChild(script);
-  });
+function getAppConfig() {
+  return window.siteComandaConfig || {};
 }
 
-function isNetlifyIdentityAvailable() {
-  return typeof window.netlifyIdentity !== 'undefined';
+function getAllowedEmails() {
+  const access = getAppConfig().access || {};
+  const emails = Array.isArray(access.allowedEmails) ? access.allowedEmails : [];
+  return emails
+    .map((email) => String(email || '').trim().toLowerCase())
+    .filter(Boolean);
 }
 
-function getNetlifyIdentitySettings() {
-  const store = isNetlifyIdentityAvailable() ? window.netlifyIdentity.store : null;
-  return store && store.settings ? store.settings : null;
+function isPrivateMode() {
+  const config = getAppConfig();
+  return config.mode !== 'public';
 }
 
-function renderAccessDenied() {
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function getStoredAuthorizedEmail() {
+  return normalizeEmail(localStorage.getItem(AUTH_STORAGE_KEY));
+}
+
+function setStoredAuthorizedEmail(email) {
+  localStorage.setItem(AUTH_STORAGE_KEY, normalizeEmail(email));
+  localStorage.setItem(AUTH_STATE_KEY, 'authorized');
+}
+
+function clearStoredAuthorizedEmail() {
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+  localStorage.removeItem(AUTH_STATE_KEY);
+}
+
+function isEmailAllowed(email) {
+  const allowedEmails = getAllowedEmails();
+  if (allowedEmails.length === 0) {
+    return false;
+  }
+  return allowedEmails.includes(normalizeEmail(email));
+}
+
+function isAppAuthorized() {
+  if (!isPrivateMode()) {
+    return true;
+  }
+
+  const storedEmail = getStoredAuthorizedEmail();
+  return !!storedEmail && isEmailAllowed(storedEmail);
+}
+
+function getAuthorizedEmailLabel() {
+  return getStoredAuthorizedEmail() || 'Visitante';
+}
+
+function renderAccessDenied(message) {
   const app = document.getElementById('app');
   if (!app) return;
+
+  const allowedEmails = getAllowedEmails();
+  const allowedList = allowedEmails.length
+    ? `<p class="text-xs text-slate-500 mt-4 break-words">Emails liberados: ${allowedEmails.join(', ')}</p>`
+    : '<p class="text-xs text-slate-500 mt-4">Nenhum email foi configurado em js/site-config.js.</p>';
 
   app.innerHTML = `
     <div class="min-h-[70vh] flex items-center justify-center">
       <div class="w-full max-w-xl bg-white rounded-2xl border border-slate-200 shadow-xl p-8 text-center">
         <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-red-100 text-red-700 font-bold mb-4">!</div>
         <h2 class="text-2xl font-bold text-slate-900 mb-2">Acesso negado</h2>
-        <p class="text-sm text-slate-600">Este email não está autorizado neste site.</p>
+        <p class="text-sm text-slate-600">${message || 'Seu email não está autorizado neste site.'}</p>
+        ${allowedList}
       </div>
     </div>
   `;
 }
 
-function redirectToGoogleLogin() {
-  const gotrue = isNetlifyIdentityAvailable() ? window.netlifyIdentity.store?.gotrue : null;
-  if (!gotrue || authRedirectInProgress) return;
-
-  authRedirectInProgress = true;
-  authStateResolved = false;
-
-  gotrue
-    .settings()
-    .then((settings) => {
-      const hasGoogle = !!settings?.external?.google;
-      const hasPassword = !!settings?.external?.password;
-
-      if (hasGoogle) {
-        window.location.href = gotrue.loginExternalUrl('google');
-        return;
-      }
-
-      if (hasPassword) {
-        window.location.href = gotrue.loginExternalUrl('password');
-        return;
-      }
-
-      authAccessDenied = true;
-      authRedirectInProgress = false;
-      authStateResolved = true;
-      renderPage();
-    })
-    .catch(() => {
-      authAccessDenied = true;
-      authRedirectInProgress = false;
-      authStateResolved = true;
-      renderPage();
-    });
-}
-
-function isAppAuthorized() {
-  return !!(isNetlifyIdentityAvailable() && window.netlifyIdentity.currentUser());
-}
-
-function getAuthenticatedUserLabel() {
-  const user = isNetlifyIdentityAvailable() ? window.netlifyIdentity.currentUser() : null;
-  return user?.email || user?.user_metadata?.full_name || 'Usuário autenticado';
-}
-
-function ensureAuthGate() {
+function renderAccessForm() {
   const app = document.getElementById('app');
   if (!app) return;
 
-  if (isAppAuthorized()) {
-    authReady = true;
-    authStateResolved = true;
-    return;
-  }
+  const allowedEmails = getAllowedEmails();
+  const helpText = allowedEmails.length
+    ? 'Digite o mesmo email que foi liberado no arquivo de configuração.'
+    : 'Configure os emails liberados em js/site-config.js antes de usar o acesso privado.';
 
   app.innerHTML = `
     <div class="min-h-[70vh] flex items-center justify-center">
-      <div class="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-8 text-center">
-        <div class="mb-6">
-          <svg class="w-16 h-16 mx-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-          </svg>
+      <div class="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-8">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-700 font-bold">M</div>
+          <div>
+            <h2 class="text-2xl font-bold text-slate-900">Acesso por email</h2>
+            <p class="text-sm text-slate-600">Somente emails autorizados entram no sistema</p>
+          </div>
         </div>
-        <h2 class="text-2xl font-bold text-slate-900 mb-2">Aguardando acesso</h2>
-        <p class="text-slate-600">Seu email precisa estar autorizado no Netlify Identity.</p>
+
+        <div class="space-y-4">
+          <div>
+            <label for="authEmail" class="block text-sm font-medium text-slate-700 mb-2">Email autorizado</label>
+            <input id="authEmail" type="email" autocomplete="email" placeholder="voce@dominio.com" class="w-full border border-slate-300 rounded-lg px-4 py-3 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <button id="btnAuthorizeEmail" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition">
+            Entrar
+          </button>
+          <p class="text-sm text-slate-600">${helpText}</p>
+        </div>
+
+        ${allowedEmails.length ? `<p class="text-xs text-slate-500 mt-4 break-words">Liberados: ${allowedEmails.join(', ')}</p>` : ''}
       </div>
     </div>
   `;
+
+  const input = document.getElementById('authEmail');
+  const button = document.getElementById('btnAuthorizeEmail');
+
+  const handleSubmit = () => {
+    const email = normalizeEmail(input?.value);
+    if (!email) {
+      renderAccessDenied('Digite um email para continuar.');
+      renderAccessForm();
+      return;
+    }
+
+    if (!isEmailAllowed(email)) {
+      clearStoredAuthorizedEmail();
+      renderAccessDenied('Este email não está autorizado neste site.');
+      renderAccessForm();
+      return;
+    }
+
+    setStoredAuthorizedEmail(email);
+    renderPage();
+  };
+
+  if (button) {
+    button.addEventListener('click', handleSubmit);
+  }
+
+  if (input) {
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        handleSubmit();
+      }
+    });
+  }
 }
 
-function renderAuthBadge() {
+function renderAccessBadge() {
   const nav = document.querySelector('nav .flex.items-center.justify-between');
   if (!nav) return;
 
@@ -151,108 +172,43 @@ function renderAuthBadge() {
 
   badge.innerHTML = `
     <div class="flex items-center gap-2 text-sm text-slate-600">
-      <span class="px-2 py-1 rounded-full bg-green-100 text-green-700 font-medium">\${getAuthenticatedUserLabel()}</span>
+      <span class="px-2 py-1 rounded-full bg-green-100 text-green-700 font-medium">${getAuthorizedEmailLabel()}</span>
     </div>
   `;
 }
 
-function setupAuthListeners() {
-  if (!isNetlifyIdentityAvailable() || window.__siteComandaAuthListeners) return;
-  window.__siteComandaAuthListeners = true;
-
-  window.netlifyIdentity.on('init', (user) => {
-    authReady = true;
-    authStateResolved = true;
-    authAccessDenied = false;
-    renderPage();
-  });
-
-  window.netlifyIdentity.on('login', (user) => {
-    authReady = true;
-    authStateResolved = true;
-    authAccessDenied = false;
-    authRetryCount = 0;
-    renderPage();
-  });
-
-  window.netlifyIdentity.on('logout', () => {
-    // Limpar estado de autenticação
-    authReady = false;
-    authStateResolved = false;
-    authAccessDenied = false;
-    authRedirectInProgress = false;
-    authRetryCount = 0;
-    
-    // Limpar localStorage de autenticação que possa ficar preso
-    Object.keys(localStorage).forEach(k => {
-      if (k.includes('nf_') || k.includes('auth') || k.includes('identity')) {
-        localStorage.removeItem(k);
-      }
-    });
-    
-    renderPage();
-  });
-
-  window.netlifyIdentity.on('error', (err) => {
-    const message = String(err || '');
-    if (
-      message.includes('access_denied') ||
-      message.includes('403') ||
-      message.includes('Unsupported provider') ||
-      message.includes('Provider is not enabled')
-    ) {
-      authAccessDenied = true;
-      authRedirectInProgress = false;
-      authStateResolved = true;
-      renderPage();
-    }
-  });
-}
-
-// Muda para uma rota diferente (atualiza o hash da URL)
 function navigateTo(path) {
   window.location.hash = path;
 }
 
-// Obtém a rota atual pela URL
 function getCurrentRoute() {
   let hash = window.location.hash.slice(1);
   if (!hash) hash = '/';
   return hash;
 }
 
-// Renderiza a página baseado na rota
-function renderPage() {
-  if (!authReady) {
-    loadNetlifyIdentityWidget()
-      .then(() => {
-        if (isNetlifyIdentityAvailable()) {
-          setupAuthListeners();
-          window.netlifyIdentity.init();
-          authReady = true;
-          renderPage();
-        }
-      })
-      .catch(() => {
-        authReady = true;
-        ensureAuthGate();
-      });
-
-    if (!isNetlifyIdentityAvailable()) {
-      ensureAuthGate();
-      return;
+function updateNavLinks() {
+  const navLinks = document.querySelectorAll('.nav-link');
+  navLinks.forEach((link) => {
+    const page = link.dataset.page;
+    if (page === currentRoute) {
+      link.classList.add('active');
+    } else {
+      link.classList.remove('active');
     }
-  }
+  });
+}
 
-  // Se não está autenticado, não mostra conteúdo
-  if (!isAppAuthorized()) {
-    ensureAuthGate();
+function renderPage() {
+  if (isPrivateMode() && !isAppAuthorized()) {
+    renderAccessForm();
+    renderAccessBadge();
     return;
   }
 
   const route = getCurrentRoute();
   currentRoute = route;
-  
+
   const app = document.getElementById('app');
   if (!app) return;
 
@@ -282,49 +238,17 @@ function renderPage() {
   }
 
   app.innerHTML = result.html;
-
-  // Atualizar nav links ativos
   updateNavLinks();
+  renderAccessBadge();
 
-  // Executar callback pós-renderização
-  renderAuthBadge();
   if (result.afterRender) {
     result.afterRender();
   }
 }
 
-function updateNavLinks() {
-  const navLinks = document.querySelectorAll('.nav-link');
-  navLinks.forEach(link => {
-    const page = link.dataset.page;
-    if (page === currentRoute) {
-      link.classList.add('active');
-    } else {
-      link.classList.remove('active');
-    }
-  });
-}
-
-// Event listeners
 window.addEventListener('hashchange', renderPage);
-
-// Inicializar
-document.addEventListener('DOMContentLoaded', () => {
-  renderPage();
-  // Adiciona controles de backup/import
-  renderBackupControls();
-});
-
-// Se a página já carregou antes do script executar
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', renderPage);
-} else {
-  renderPage();
-}
-
 window.navigateTo = navigateTo;
 
-// Renderiza controles de Export/Import de backup (download/upload JSON)
 function renderBackupControls() {
   if (document.getElementById('backup-controls')) return;
 
@@ -376,4 +300,17 @@ function renderBackupControls() {
     };
     reader.readAsText(file);
   });
+}
+
+function initApp() {
+  if (document.getElementById('backup-controls')) return;
+  renderPage();
+  renderBackupControls();
+}
+
+// Inicialização
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
 }
