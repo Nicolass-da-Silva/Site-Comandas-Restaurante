@@ -11,6 +11,11 @@ function isNetlifyIdentityAvailable() {
   return typeof window.netlifyIdentity !== 'undefined';
 }
 
+function getNetlifyIdentitySettings() {
+  const store = isNetlifyIdentityAvailable() ? window.netlifyIdentity.store : null;
+  return store && store.settings ? store.settings : null;
+}
+
 function isAccessDeniedHash() {
   const hash = window.location.hash.slice(1);
   return hash.includes('error=access_denied') || hash.includes('error_description=403');
@@ -24,7 +29,7 @@ function renderAccessDenied() {
     <div class="min-h-[70vh] flex items-center justify-center">
       <div class="w-full max-w-xl bg-white rounded-2xl border border-slate-200 shadow-xl p-8 text-center">
         <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-red-100 text-red-700 font-bold mb-4">!</div>
-        <h2 class="text-2xl font-bold text-slate-900 mb-2">Sem acesso</h2>
+        <h2 class="text-2xl font-bold text-slate-900 mb-2">Usuário não permitido</h2>
         <p class="text-sm text-slate-600">Sua conta não está autorizada para este site.</p>
       </div>
     </div>
@@ -36,8 +41,28 @@ function redirectToGoogleLogin() {
   if (!gotrue || authRedirectInProgress) return;
 
   authRedirectInProgress = true;
-  authStateResolved = true;
-  window.location.href = gotrue.loginExternalUrl('google');
+  authStateResolved = false;
+
+  gotrue
+    .settings()
+    .then((settings) => {
+      if (!settings?.external?.google) {
+        authAccessDenied = true;
+        authRedirectInProgress = false;
+        authStateResolved = true;
+        renderPage();
+        return;
+      }
+
+      authStateResolved = true;
+      window.location.href = gotrue.loginExternalUrl('google');
+    })
+    .catch(() => {
+      authAccessDenied = true;
+      authRedirectInProgress = false;
+      authStateResolved = true;
+      renderPage();
+    });
 }
 
 function isAppAuthorized() {
@@ -144,7 +169,12 @@ function setupAuthListeners() {
 
   window.netlifyIdentity.on('error', (err) => {
     const message = String(err || '');
-    if (message.includes('access_denied') || message.includes('403')) {
+    if (
+      message.includes('access_denied') ||
+      message.includes('403') ||
+      message.includes('Unsupported provider') ||
+      message.includes('Provider is not enabled')
+    ) {
       authAccessDenied = true;
       authRedirectInProgress = false;
       authStateResolved = true;
@@ -178,23 +208,12 @@ function renderPage() {
     return;
   }
 
-  if (isNetlifyIdentityAvailable() && !authStateResolved) {
-    const app = document.getElementById('app');
-    if (app) {
-      app.innerHTML = `
-        <div class="min-h-[70vh] flex items-center justify-center">
-          <div class="w-full max-w-xl bg-white rounded-2xl border border-slate-200 shadow-xl p-8 text-center">
-            <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-orange-100 text-orange-700 font-bold mb-4">M</div>
-            <h2 class="text-2xl font-bold text-slate-900 mb-2">Entrando no site</h2>
-            <p class="text-sm text-slate-600">Conferindo sua sessão autorizada no Netlify Identity</p>
-          </div>
-        </div>
-      `;
-    }
-    return;
-  }
-
   if (!isAppAuthorized()) {
+    if (authAccessDenied) {
+      renderAccessDenied();
+      renderAuthBadge();
+      return;
+    }
     ensureAuthGate();
     renderAuthBadge();
     redirectToGoogleLogin();
