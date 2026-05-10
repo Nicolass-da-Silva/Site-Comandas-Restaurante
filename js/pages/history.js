@@ -14,7 +14,8 @@ function getLocalDateISO(timestamp) {
 // Renderiza a página de histórico
 function renderHistoryPage() {
   const allClosedOrders = data.TableOrder.filter({ status: 'closed' }, '-created_date');
-  const selectedDate = localStorage.getItem('selectedHistoryDate') || getLocalDateISO(Date.now());
+  // Sempre inicializa exibindo o dia atual para evitar históricos de dias errados
+  const selectedDate = getLocalDateISO(Date.now());
   
   const [year, month, day] = selectedDate.split('-');
   const displayDate = new Date(year, month - 1, day).toLocaleDateString('pt-BR');

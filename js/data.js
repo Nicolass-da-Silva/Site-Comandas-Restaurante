@@ -151,6 +151,41 @@ function initializeData() {
   }
 }
 
+// Ajusta pedidos com datas anteriores à data de abertura do restaurante
+function migrateOrdersToOpenDate(openDateISO) {
+  try {
+    const orders = read('tableOrders');
+    if (!Array.isArray(orders) || orders.length === 0) return;
+
+    const openDate = new Date(openDateISO);
+    orders.forEach((o) => {
+      const created = new Date(o.created_date);
+      if (created < openDate) {
+        // preserva hora/minuto/segundo do registro original
+        const h = created.getHours();
+        const m = created.getMinutes();
+        const s = created.getSeconds();
+        const newCreated = new Date(openDate.getFullYear(), openDate.getMonth(), openDate.getDate(), h, m, s).getTime();
+        o.created_date = newCreated;
+        if (o.closed_date) {
+          const closed = new Date(o.closed_date);
+          const ch = closed.getHours();
+          const cm = closed.getMinutes();
+          const cs = closed.getSeconds();
+          o.closed_date = new Date(openDate.getFullYear(), openDate.getMonth(), openDate.getDate(), ch, cm, cs).getTime();
+        }
+      }
+      // garante campos para pagamentos e nome da mesa
+      if (typeof o.paidAmount !== 'number') o.paidAmount = 0;
+      if (!Array.isArray(o.payments)) o.payments = [];
+      if (o.table_name === undefined) o.table_name = null;
+    });
+    write('tableOrders', orders);
+  } catch (e) {
+    // ignore
+  }
+}
+
 // Verifica se um item tem todos os campos da query
 const matchQuery = (item, query = {}) => {
   return Object.keys(query).every((k) => item[k] === query[k]);
@@ -217,6 +252,9 @@ const data = {
         created_date: Date.now(),
         items: [],
         total: 0,
+        paidAmount: 0,
+        payments: [],
+        table_name: null,
         ...order 
       };
       items.push(newOrder);
@@ -302,6 +340,18 @@ data.importBackup = function(backup = {}, options = {}) {
 };
 
 // Inicializar dados e expor API
+// Garantir que exista uma data de abertura do restaurante
+// Usuário informou que o restaurante abriu em 09/05 — usamos ISO 2026-05-09
+const OPEN_DATE_KEY = storageKey('siteOpenDate');
+if (!localStorage.getItem(OPEN_DATE_KEY)) {
+  // formato ISO yyyy-mm-dd
+  localStorage.setItem(OPEN_DATE_KEY, '2026-05-09');
+}
+
 initializeData();
+
+// Migra pedidos com datas anteriores à data de abertura para o dia de abertura
+const openISO = localStorage.getItem(OPEN_DATE_KEY) || (new Date()).toISOString().slice(0,10);
+migrateOrdersToOpenDate(openISO);
 
 window.data = data;

@@ -58,7 +58,7 @@ function renderTablesPage() {
       html += `
         <div class="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition">
           <div class="flex items-start justify-between mb-2">
-            <h3 class="text-lg font-bold text-slate-900 cursor-pointer" onclick="navigateTo('/mesa/${order.id}')">Mesa ${order.table_number}</h3>
+            <h3 class="text-lg font-bold text-slate-900 cursor-pointer" onclick="navigateTo('/mesa/${order.id}')">${order.table_name ? order.table_name : 'Mesa ' + order.table_number}</h3>
             <div class="flex items-center gap-2">
               <span class="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded">Aberta</span>
               <button class="btn-delete-table text-slate-400 hover:text-red-600 p-1 transition" data-table-id="${order.id}" title="Deletar mesa">
@@ -107,7 +107,7 @@ function showOpenTableDialog() {
     .map(o => o.table_number);
 
   // Define quais mesas estão disponíveis (1 a 10)
-  const allTables = Array.from({ length: 4 }, (_, i) => i + 1);
+  const allTables = Array.from({ length: 10 }, (_, i) => i + 1);
   const availableTables = allTables.filter(n => !existingTables.includes(n));
 
   let options = availableTables.map(t => `<option value="${t}">Mesa ${t}</option>`).join('');
@@ -117,10 +117,11 @@ function showOpenTableDialog() {
   dialog.innerHTML = `
     <div class="bg-white rounded-lg p-6 w-96 shadow-xl">
       <h2 class="text-xl font-bold mb-4 text-slate-900">Abrir Nova Mesa</h2>
-      <select id="tableSelect" class="w-full px-3 py-2 border border-slate-300 rounded-lg mb-4">
+      <select id="tableSelect" class="w-full px-3 py-2 border border-slate-300 rounded-lg mb-2">
         <option>Selecione uma mesa</option>
         ${options}
       </select>
+      <input id="tableNameInput" placeholder="Nome da mesa (opcional) — ex: Família Silva" class="w-full px-3 py-2 border border-slate-300 rounded-lg mb-4" />
       <div class="flex gap-3 justify-end">
         <button onclick="this.closest('.fixed').remove()" class="px-4 py-2 border border-slate-300 rounded-lg text-slate-900 hover:bg-slate-50 transition font-medium">
           Cancelar
@@ -137,10 +138,12 @@ function showOpenTableDialog() {
   document.getElementById('btnConfirmOpen').addEventListener('click', () => {
     const tableNumber = parseInt(document.getElementById('tableSelect').value);
     if (!tableNumber) return;
-    
+    const tableName = (document.getElementById('tableNameInput').value || '').trim() || null;
+
     // Cria novo pedido com mesa vazia
     const newOrder = data.TableOrder.create({
       table_number: tableNumber,
+      table_name: tableName,
       status: 'open',
       items: [],
       total: 0
@@ -164,7 +167,7 @@ function showDeleteTableConfirmDialog(tableId) {
     <div class="bg-white rounded-lg p-6 w-96 shadow-xl">
       <h2 class="text-xl font-bold mb-2 text-slate-900">Deletar Mesa?</h2>
       <p class="text-slate-600 mb-6">
-        Tem certeza que deseja deletar a <strong>Mesa ${order.table_number}</strong>? 
+        Tem certeza que deseja deletar a <strong>${order.table_name ? order.table_name : 'Mesa ' + order.table_number}</strong>? 
         Esta ação não pode ser desfeita.
       </p>
       ${order.items && order.items.length > 0 ? `
