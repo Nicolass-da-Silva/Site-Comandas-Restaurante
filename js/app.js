@@ -69,28 +69,33 @@ function redirectToGoogleLogin() {
   authRedirectInProgress = true;
   authStateResolved = false;
 
-  try {
-    // Tentar fazer login direto com Google
-    const loginUrl = gotrue.loginExternalUrl('google');
-    window.location.href = loginUrl;
-  } catch (err) {
-    // Se falhar, tentar via settings
-    gotrue
-      .settings()
-      .then((settings) => {
-        if (!settings?.external?.google) {
-          throw new Error('Google not enabled');
-        }
-        const loginUrl = gotrue.loginExternalUrl('google');
-        window.location.href = loginUrl;
-      })
-      .catch(() => {
-        authAccessDenied = true;
-        authRedirectInProgress = false;
-        authStateResolved = true;
-        renderPage();
-      });
-  }
+  gotrue
+    .settings()
+    .then((settings) => {
+      const hasGoogle = !!settings?.external?.google;
+      const hasPassword = !!settings?.external?.password;
+
+      if (hasGoogle) {
+        window.location.href = gotrue.loginExternalUrl('google');
+        return;
+      }
+
+      if (hasPassword) {
+        window.location.href = gotrue.loginExternalUrl('password');
+        return;
+      }
+
+      authAccessDenied = true;
+      authRedirectInProgress = false;
+      authStateResolved = true;
+      renderPage();
+    })
+    .catch(() => {
+      authAccessDenied = true;
+      authRedirectInProgress = false;
+      authStateResolved = true;
+      renderPage();
+    });
 }
 
 function isAppAuthorized() {
@@ -116,12 +121,12 @@ function ensureAuthGate() {
     <div class="min-h-[70vh] flex items-center justify-center">
       <div class="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-8 text-center">
         <div class="mb-6">
-          <svg class="w-16 h-16 mx-auto text-slate-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <svg class="w-16 h-16 mx-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
         </div>
-        <h2 class="text-2xl font-bold text-slate-900 mb-2">Autenticando...</h2>
-        <p class="text-slate-600">Carregando sua sessão</p>
+        <h2 class="text-2xl font-bold text-slate-900 mb-2">Aguardando acesso</h2>
+        <p class="text-slate-600">Seu email precisa estar autorizado no Netlify Identity.</p>
       </div>
     </div>
   `;
@@ -242,16 +247,6 @@ function renderPage() {
   // Se não está autenticado, não mostra conteúdo
   if (!isAppAuthorized()) {
     ensureAuthGate();
-    
-    // Forçar redirect automático imediatamente com retry
-    setTimeout(() => {
-      if (!isAppAuthorized()) {
-        if (authRetryCount < MAX_AUTH_RETRIES) {
-          authRetryCount++;
-          redirectToGoogleLogin();
-        }
-      }
-    }, 500);
     return;
   }
 
