@@ -9,6 +9,35 @@ let authAccessDenied = false;
 let authRetryCount = 0;
 const MAX_AUTH_RETRIES = 3;
 
+function loadNetlifyIdentityWidget() {
+  return new Promise((resolve, reject) => {
+    if (isNetlifyIdentityAvailable()) {
+      resolve();
+      return;
+    }
+
+    if (document.querySelector('script[data-netlify-identity-widget]')) {
+      const checkReady = () => {
+        if (isNetlifyIdentityAvailable()) {
+          resolve();
+        } else {
+          setTimeout(checkReady, 100);
+        }
+      };
+      checkReady();
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://identity.netlify.com/v1/netlify-identity-widget.js';
+    script.async = true;
+    script.dataset.netlifyIdentityWidget = 'true';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Falha ao carregar Netlify Identity'));
+    document.head.appendChild(script);
+  });
+}
+
 function isNetlifyIdentityAvailable() {
   return typeof window.netlifyIdentity !== 'undefined';
 }
@@ -189,10 +218,25 @@ function getCurrentRoute() {
 
 // Renderiza a página baseado na rota
 function renderPage() {
-  if (!authReady && isNetlifyIdentityAvailable()) {
-    setupAuthListeners();
-    window.netlifyIdentity.init();
-    authReady = true;
+  if (!authReady) {
+    loadNetlifyIdentityWidget()
+      .then(() => {
+        if (isNetlifyIdentityAvailable()) {
+          setupAuthListeners();
+          window.netlifyIdentity.init();
+          authReady = true;
+          renderPage();
+        }
+      })
+      .catch(() => {
+        authReady = true;
+        ensureAuthGate();
+      });
+
+    if (!isNetlifyIdentityAvailable()) {
+      ensureAuthGate();
+      return;
+    }
   }
 
   // Se não está autenticado, não mostra conteúdo
