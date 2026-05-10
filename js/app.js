@@ -6,21 +6,8 @@ let authReady = false;
 let authStateResolved = false;
 let authRedirectInProgress = false;
 let authAccessDenied = false;
-
-// Verificar se há estado quebrado ao carregar
-function resetBrokenAuthState() {
-  // Se está mostrando "acesso negado" mas o Netlify Identity existe e não tem user, limpar localStorage de auth
-  if (!isAppAuthorized() && isNetlifyIdentityAvailable()) {
-    // Limpar qualquer cookie/storage de autenticação que possa estar quebrado
-    Object.keys(localStorage).forEach(k => {
-      if (k.includes('nf_') || k.includes('auth') || k.includes('identity') || k.includes('gotrue')) {
-        try {
-          localStorage.removeItem(k);
-        } catch (e) {}
-      }
-    });
-  }
-}
+let authRetryCount = 0;
+const MAX_AUTH_RETRIES = 3;
 
 function isNetlifyIdentityAvailable() {
   return typeof window.netlifyIdentity !== 'undefined';
@@ -29,11 +16,6 @@ function isNetlifyIdentityAvailable() {
 function getNetlifyIdentitySettings() {
   const store = isNetlifyIdentityAvailable() ? window.netlifyIdentity.store : null;
   return store && store.settings ? store.settings : null;
-}
-
-function isAccessDeniedHash() {
-  const hash = window.location.hash.slice(1);
-  return hash.includes('error=access_denied') || hash.includes('error_description=403');
 }
 
 function renderAccessDenied() {
@@ -58,26 +40,28 @@ function redirectToGoogleLogin() {
   authRedirectInProgress = true;
   authStateResolved = false;
 
-  gotrue
-    .settings()
-    .then((settings) => {
-      if (!settings?.external?.google) {
+  try {
+    // Tentar fazer login direto com Google
+    const loginUrl = gotrue.loginExternalUrl('google');
+    window.location.href = loginUrl;
+  } catch (err) {
+    // Se falhar, tentar via settings
+    gotrue
+      .settings()
+      .then((settings) => {
+        if (!settings?.external?.google) {
+          throw new Error('Google not enabled');
+        }
+        const loginUrl = gotrue.loginExternalUrl('google');
+        window.location.href = loginUrl;
+      })
+      .catch(() => {
         authAccessDenied = true;
         authRedirectInProgress = false;
         authStateResolved = true;
         renderPage();
-        return;
-      }
-
-      authStateResolved = true;
-      window.location.href = gotrue.loginExternalUrl('google');
-    })
-    .catch(() => {
-      authAccessDenied = true;
-      authRedirectInProgress = false;
-      authStateResolved = true;
-      renderPage();
-    });
+      });
+  }
 }
 
 function isAppAuthorized() {
@@ -103,25 +87,15 @@ function ensureAuthGate() {
     <div class="min-h-[70vh] flex items-center justify-center">
       <div class="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-8 text-center">
         <div class="mb-6">
-          <svg class="w-16 h-16 mx-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          <svg class="w-16 h-16 mx-auto text-slate-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
-        <h2 class="text-2xl font-bold text-slate-900 mb-2">Acesso restrito</h2>
-        <p class="text-slate-600 mb-8">Este site requer autenticação. Por favor, faça login com sua conta Google.</p>
-        <button id="btnLoginGoogle" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition mb-3">
-          Entrar com Google
-        </button>
-        <p class="text-xs text-slate-500 mt-4">Você será redirecionado para fazer login</p>
+        <h2 class="text-2xl font-bold text-slate-900 mb-2">Autenticando...</h2>
+        <p class="text-slate-600">Carregando sua sessão</p>
       </div>
     </div>
   `;
-
-  // Botão visível de login
-  const btnLoginGoogle = document.getElementById('btnLoginGoogle');
-  if (btnLoginGoogle) {
-    btnLoginGoogle.addEventListener('click', redirectToGoogleLogin);
-  }
 }
 
 function renderAuthBadge() {
@@ -163,6 +137,7 @@ function setupAuthListeners() {
     authReady = true;
     authStateResolved = true;
     authAccessDenied = false;
+    authRetryCount = 0;
     renderPage();
   });
 
@@ -172,6 +147,7 @@ function setupAuthListeners() {
     authStateResolved = false;
     authAccessDenied = false;
     authRedirectInProgress = false;
+    authRetryCount = 0;
     
     // Limpar localStorage de autenticação que possa ficar preso
     Object.keys(localStorage).forEach(k => {
@@ -213,39 +189,25 @@ function getCurrentRoute() {
 
 // Renderiza a página baseado na rota
 function renderPage() {
-  // Resetar estado quebrado se necessário
-  resetBrokenAuthState();
-
   if (!authReady && isNetlifyIdentityAvailable()) {
     setupAuthListeners();
     window.netlifyIdentity.init();
     authReady = true;
   }
 
-  // Detectar se há estado de logout persistente e limpar
-  if (isAccessDeniedHash()) {
-    // Limpar hash de erro
-    window.location.hash = '';
-    authAccessDenied = false;
-    authStateResolved = false;
-    redirectToGoogleLogin();
-    return;
-  }
-
-  if (authAccessDenied) {
-    // Se estava em acesso negado mas agora tem usuário, liberar
-    if (isAppAuthorized()) {
-      authAccessDenied = false;
-    } else {
-      renderAccessDenied();
-      return;
-    }
-  }
-
+  // Se não está autenticado, não mostra conteúdo
   if (!isAppAuthorized()) {
     ensureAuthGate();
-    renderAuthBadge();
-    redirectToGoogleLogin();
+    
+    // Forçar redirect automático imediatamente com retry
+    setTimeout(() => {
+      if (!isAppAuthorized()) {
+        if (authRetryCount < MAX_AUTH_RETRIES) {
+          authRetryCount++;
+          redirectToGoogleLogin();
+        }
+      }
+    }, 500);
     return;
   }
 
