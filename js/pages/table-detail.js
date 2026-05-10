@@ -1,6 +1,18 @@
 // DETALHES DA MESA
 // Exibe itens da mesa com opções de adicionar/remover itens e fechar/deletar mesa
 
+const PAYMENT_METHODS = [
+  { value: 'dinheiro', label: 'Dinheiro' },
+  { value: 'pix', label: 'PIX' },
+  { value: 'debito', label: 'Débito' },
+  { value: 'credito', label: 'Crédito' },
+];
+
+function getPaymentMethodLabel(method) {
+  const found = PAYMENT_METHODS.find(item => item.value === method);
+  return found ? found.label : 'Não informado';
+}
+
 function renderTableDetailPage(tableId) {
   const order = data.TableOrder.get(tableId);
   
@@ -22,6 +34,7 @@ function renderTableDetailPage(tableId) {
   const items = order.items || [];
   const total = order.total || 0;
   const paidAmount = order.paidAmount || 0;
+  const payments = Array.isArray(order.payments) ? order.payments : [];
   const allMenuItems = data.MenuItem.list();
 
   let html = `
@@ -128,6 +141,22 @@ function renderTableDetailPage(tableId) {
               <span class="text-lg font-bold text-slate-900">Total:</span>
               <span class="text-2xl font-bold text-blue-600">R$ ${total.toFixed(2)}</span>
             </div>
+            ${payments.length > 0 ? `
+              <div class="mb-4 p-3 rounded-lg bg-slate-50 border border-slate-200">
+                <p class="text-sm font-semibold text-slate-900 mb-2">Pagamentos salvos</p>
+                <div class="space-y-2 max-h-48 overflow-auto pr-1">
+                  ${payments.slice().reverse().map(payment => `
+                    <div class="text-sm bg-white border border-slate-200 rounded-lg p-2">
+                      <div class="flex items-center justify-between gap-2">
+                        <span class="font-medium text-slate-900">${getPaymentMethodLabel(payment.method)} · ${payment.mode === 'full' ? 'Mesa toda' : 'Parcelado'}</span>
+                        <span class="font-semibold text-slate-900">R$ ${(payment.amount || 0).toFixed(2)}</span>
+                      </div>
+                      <p class="text-xs text-slate-500 mt-1">${new Date(payment.date || Date.now()).toLocaleString('pt-BR')}</p>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
             <button id="btnPayTable" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition" ${items.length === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed"' : ''}>
               <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -151,7 +180,7 @@ function renderTableDetailPage(tableId) {
 
       if (btnAddItem) btnAddItem.addEventListener('click', () => showAddItemDialog(tableId, allMenuItems));
       if (btnAddItemEmpty) btnAddItemEmpty.addEventListener('click', () => showAddItemDialog(tableId, allMenuItems));
-      if (btnCloseTable) btnCloseTable.addEventListener('click', () => closeTableConfirm(tableId));
+      if (btnCloseTable) btnCloseTable.addEventListener('click', () => payTableConfirm(tableId));
       if (btnDeleteTable) btnDeleteTable.addEventListener('click', () => deleteTableConfirm(tableId));
       if (btnPayTable) btnPayTable.addEventListener('click', () => payTableConfirm(tableId));
     }
@@ -337,14 +366,6 @@ function removeItemFromOrder(tableId, itemIndex) {
 }
 
 // Fecha a mesa e marca como histórico
-function closeTableConfirm(tableId) {
-  if (confirm('Tem certeza que deseja fechar esta mesa?')) {
-    const order = data.TableOrder.get(tableId);
-    data.TableOrder.update(tableId, { status: 'closed', closed_date: Date.now() });
-    navigateTo('/');
-  }
-}
-
 // Retorna quantas unidades de um item já foram pagas (somando pagamentos)
 function getPaidQty(order, itemId) {
   if (!order || !Array.isArray(order.payments)) return 0;
@@ -422,11 +443,25 @@ function payTableConfirm(tableId) {
   dialog.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
 
   const remainingTotal = Math.max(0, (order.total || 0) - (order.paidAmount || 0));
+  const isFullyPaid = remainingTotal <= 0;
 
   dialog.innerHTML = `
-    <div class="bg-white rounded-lg p-6 w-96 shadow-xl max-h-[80vh] overflow-auto">
+    <div class="bg-white rounded-lg p-6 w-[28rem] shadow-xl max-h-[85vh] overflow-auto">
       <h2 class="text-xl font-bold mb-2 text-slate-900">Pagamento - Mesa ${order.table_number}</h2>
       <p class="text-sm text-slate-600 mb-3">Total restante: R$ ${remainingTotal.toFixed(2)}</p>
+      <div class="mb-4">
+        <label class="text-sm font-medium text-slate-700 block mb-1">Modo</label>
+        <select id="paymentModeSelect" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          <option value="full" ${isFullyPaid ? 'selected' : ''}>Mesa toda</option>
+          <option value="partial" ${isFullyPaid ? '' : 'selected'}>Parcelado</option>
+        </select>
+      </div>
+      <div class="mb-4">
+        <label class="text-sm font-medium text-slate-700 block mb-1">Forma de pagamento</label>
+        <select id="paymentMethodSelect" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          ${PAYMENT_METHODS.map(method => `<option value="${method.value}">${method.label}</option>`).join('')}
+        </select>
+      </div>
       <div class="space-y-2 mb-3" id="payItemsList">
         ${order.items.map((it, idx) => {
           const paid = getPaidQty(order, it.id);
@@ -462,11 +497,25 @@ function payTableConfirm(tableId) {
   document.getElementById('btnCancelPay').addEventListener('click', () => dialog.remove());
 
   document.getElementById('btnConfirmPay').addEventListener('click', () => {
+    const paymentMode = document.getElementById('paymentModeSelect').value;
+    const paymentMethod = document.getElementById('paymentMethodSelect').value;
     const customVal = parseFloat((document.getElementById('customPayAmount').value || '').replace(',', '.')) || 0;
     let amountToPay = 0;
     let itemsToRecord = [];
 
-    if (customVal > 0) {
+    if (paymentMode === 'full') {
+      if (remainingTotal <= 0) {
+        const updated = data.TableOrder.get(tableId);
+        updated.status = 'closed';
+        updated.closed_date = updated.closed_date || Date.now();
+        data.TableOrder.update(tableId, { status: 'closed', closed_date: updated.closed_date });
+        dialog.remove();
+        alert('Mesa já estava quitada. Fechamento confirmado.');
+        navigateTo('/');
+        return;
+      }
+      amountToPay = remainingTotal;
+    } else if (customVal > 0) {
       amountToPay = customVal;
     } else {
       // soma itens selecionados
@@ -487,12 +536,16 @@ function payTableConfirm(tableId) {
       return;
     }
 
+    if (paymentMode === 'full' && amountToPay < remainingTotal) {
+      amountToPay = remainingTotal;
+    }
+
     if (amountToPay > remainingTotal) {
       if (!confirm('O valor informado é maior que o restante. Deseja prosseguir e fechar a mesa?')) return;
     }
 
     // Registra pagamento
-    const payment = { id: `p${Date.now()}`, date: Date.now(), items: itemsToRecord, amount: amountToPay };
+    const payment = { id: `p${Date.now()}`, date: Date.now(), items: itemsToRecord, amount: amountToPay, method: paymentMethod, mode: paymentMode };
     const updated = data.TableOrder.get(tableId);
     updated.payments = Array.isArray(updated.payments) ? updated.payments : [];
     updated.payments.push(payment);

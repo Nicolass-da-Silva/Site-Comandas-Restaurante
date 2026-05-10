@@ -1,7 +1,10 @@
 // BANCO DE DADOS
 // Gerencia dados usando localStorage (sem servidor externo)
 
-const storageKey = (name) => `sitecomanda:${name}`;
+const appConfig = window.siteComandaConfig || {};
+const appMode = appConfig.mode === 'public' ? 'public' : 'private';
+const storageKey = (name) => `sitecomanda:${appMode}:${name}`;
+const legacyStorageKey = (name) => `sitecomanda:${name}`;
 
 // Converte string JSON em objeto ou retorna valor padrão
 const readJSON = (raw, fallback) => {
@@ -14,6 +17,19 @@ const readJSON = (raw, fallback) => {
 
 // Lê dados do localStorage
 const read = (key) => readJSON(localStorage.getItem(storageKey(key)), []);
+
+function migrateLegacyStorageIfNeeded() {
+  if (appMode !== 'private') return;
+
+  const keysToMigrate = ['menuItems', 'tableOrders', 'user', 'token', 'siteOpenDate', 'selectedHistoryDate'];
+  keysToMigrate.forEach((key) => {
+    const currentKey = storageKey(key);
+    const legacyKey = legacyStorageKey(key);
+    if (!localStorage.getItem(currentKey) && localStorage.getItem(legacyKey)) {
+      localStorage.setItem(currentKey, localStorage.getItem(legacyKey));
+    }
+  });
+}
 
 // Escreve dados no localStorage
 const write = (key, data) => {
@@ -106,6 +122,7 @@ const defaultOrders = () => {
 
 // Carrega dados padrão se não existirem no localStorage
 function initializeData() {
+  migrateLegacyStorageIfNeeded();
   localStorage.removeItem(storageKey('backupSnapshots'));
   localStorage.removeItem(storageKey('lastBackupAt'));
   // Carrega menu existente (pode ser vazio)
@@ -144,10 +161,6 @@ function initializeData() {
   }
   if (!localStorage.getItem(storageKey('tableOrders'))) {
     localStorage.setItem(storageKey('tableOrders'), JSON.stringify(defaultOrders()));
-  }
-  if (!localStorage.getItem(storageKey('token'))) {
-    localStorage.setItem(storageKey('token'), 'mock-token-123');
-    localStorage.setItem(storageKey('user'), JSON.stringify({ id: 'user1', name: 'Admin', email: 'admin@test.com' }));
   }
 }
 
@@ -397,3 +410,5 @@ migrateOrdersToOpenDate(openISO);
 fixMigratedDayIfNeeded(openISO);
 
 window.data = data;
+window.siteComandaStorageKey = storageKey;
+window.siteComandaMode = appMode;

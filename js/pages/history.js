@@ -11,6 +11,16 @@ function getLocalDateISO(timestamp) {
   return `${year}-${month}-${day}`;
 }
 
+function getPaymentMethodLabel(method) {
+  const labels = {
+    dinheiro: 'Dinheiro',
+    pix: 'PIX',
+    debito: 'Débito',
+    credito: 'Crédito'
+  };
+  return labels[method] || 'Não informado';
+}
+
 // Renderiza a página de histórico
 function renderHistoryPage() {
   const allClosedOrders = data.TableOrder.filter({ status: 'closed' }, '-created_date');
@@ -142,7 +152,7 @@ function renderHistoryPage() {
             </div>
           </div>
           <div id="details-${order.id}" class="hidden mt-4 pt-4 border-t border-slate-200">
-            <div class="space-y-2">
+            <div class="space-y-2 mb-3">
               ${order.items?.map(item => `
                 <div class="flex justify-between text-sm">
                   <span class="text-slate-600">${item.name || 'Item'} x${item.quantity || 1}</span>
@@ -150,6 +160,17 @@ function renderHistoryPage() {
                 </div>
               `).join('') || '<p class="text-sm text-slate-600">Sem itens</p>'}
             </div>
+            ${Array.isArray(order.payments) && order.payments.length > 0 ? `
+              <div class="pt-3 border-t border-slate-100 space-y-2">
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Pagamentos salvos</p>
+                ${order.payments.slice().reverse().map(payment => `
+                  <div class="flex justify-between text-sm bg-slate-50 rounded-lg px-3 py-2">
+                    <span class="text-slate-600">${getPaymentMethodLabel(payment.method)} · ${payment.mode === 'full' ? 'Mesa toda' : 'Parcelado'}</span>
+                    <span class="font-medium text-slate-900">R$ ${(payment.amount || 0).toFixed(2)}</span>
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
           </div>
         </div>
       `;
