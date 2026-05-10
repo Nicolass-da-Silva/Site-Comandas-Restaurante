@@ -4,6 +4,7 @@
 let currentRoute = '/';
 let authReady = false;
 let authGateRendered = false;
+let authLoginAutoOpened = false;
 
 function isNetlifyIdentityAvailable() {
   return typeof window.netlifyIdentity !== 'undefined';
@@ -78,6 +79,15 @@ function ensureAuthGate() {
       renderPage();
     });
   }
+
+  if (identityReady && !authLoginAutoOpened) {
+    authLoginAutoOpened = true;
+    setTimeout(() => {
+      if (!isAppAuthorized()) {
+        window.netlifyIdentity.open('login');
+      }
+    }, 0);
+  }
 }
 
 function renderAuthBadge() {
@@ -129,12 +139,14 @@ function setupAuthListeners() {
   window.netlifyIdentity.on('login', (user) => {
     authReady = true;
     authGateRendered = false;
+    authLoginAutoOpened = true;
     renderPage();
   });
 
   window.netlifyIdentity.on('logout', () => {
     authReady = false;
     authGateRendered = false;
+    authLoginAutoOpened = false;
     renderPage();
   });
 }
