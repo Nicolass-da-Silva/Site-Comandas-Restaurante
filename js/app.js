@@ -4,10 +4,40 @@
 let currentRoute = '/';
 let authReady = false;
 let authStateResolved = false;
-let authLoginAutoOpened = false;
+let authRedirectInProgress = false;
+let authAccessDenied = false;
 
 function isNetlifyIdentityAvailable() {
   return typeof window.netlifyIdentity !== 'undefined';
+}
+
+function isAccessDeniedHash() {
+  const hash = window.location.hash.slice(1);
+  return hash.includes('error=access_denied') || hash.includes('error_description=403');
+}
+
+function renderAccessDenied() {
+  const app = document.getElementById('app');
+  if (!app) return;
+
+  app.innerHTML = `
+    <div class="min-h-[70vh] flex items-center justify-center">
+      <div class="w-full max-w-xl bg-white rounded-2xl border border-slate-200 shadow-xl p-8 text-center">
+        <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-red-100 text-red-700 font-bold mb-4">!</div>
+        <h2 class="text-2xl font-bold text-slate-900 mb-2">Sem acesso</h2>
+        <p class="text-sm text-slate-600">Sua conta não está autorizada para este site.</p>
+      </div>
+    </div>
+  `;
+}
+
+function redirectToGoogleLogin() {
+  const gotrue = isNetlifyIdentityAvailable() ? window.netlifyIdentity.store?.gotrue : null;
+  if (!gotrue || authRedirectInProgress) return;
+
+  authRedirectInProgress = true;
+  authStateResolved = true;
+  window.location.href = gotrue.loginExternalUrl('google');
 }
 
 function isAppAuthorized() {
@@ -36,16 +66,16 @@ function ensureAuthGate() {
           <div class="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-700 font-bold">M</div>
           <div>
             <h2 class="text-2xl font-bold text-slate-900">Entrando no site</h2>
-            <p class="text-sm text-slate-600">Validando seu acesso autorizado</p>
+            <p class="text-sm text-slate-600">Redirecionando para o login autorizado</p>
           </div>
         </div>
 
         <div class="space-y-4 text-sm text-slate-700 mb-6">
-          <p>Seu acesso está sendo verificado pelo Netlify Identity.</p>
-          <p>Se sua conta estiver autorizada, o site abrirá automaticamente sem pedir ação extra.</p>
+          <p>Se sua conta estiver autorizada, você vai entrar direto pelo Google sem ver senha do Identity.</p>
+          <p>Contas não autorizadas recebem a mensagem de sem acesso.</p>
         </div>
 
-        <p class="mt-4 text-xs text-slate-500">Apenas usuários convidados e autorizados podem continuar.</p>
+        <p class="mt-4 text-xs text-slate-500">Aguarde um instante, o acesso será aberto automaticamente.</p>
       </div>
     </div>
   `;
@@ -94,21 +124,32 @@ function setupAuthListeners() {
   window.netlifyIdentity.on('init', (user) => {
     authReady = true;
     authStateResolved = true;
+    authAccessDenied = false;
     renderPage();
   });
 
   window.netlifyIdentity.on('login', (user) => {
     authReady = true;
     authStateResolved = true;
-    authLoginAutoOpened = false;
+    authAccessDenied = false;
     renderPage();
   });
 
   window.netlifyIdentity.on('logout', () => {
     authReady = false;
     authStateResolved = false;
-    authLoginAutoOpened = false;
+    authAccessDenied = false;
     renderPage();
+  });
+
+  window.netlifyIdentity.on('error', (err) => {
+    const message = String(err || '');
+    if (message.includes('access_denied') || message.includes('403')) {
+      authAccessDenied = true;
+      authRedirectInProgress = false;
+      authStateResolved = true;
+      renderPage();
+    }
   });
 }
 
@@ -132,6 +173,11 @@ function renderPage() {
     authReady = true;
   }
 
+  if (isAccessDeniedHash() || authAccessDenied) {
+    renderAccessDenied();
+    return;
+  }
+
   if (isNetlifyIdentityAvailable() && !authStateResolved) {
     const app = document.getElementById('app');
     if (app) {
@@ -151,14 +197,7 @@ function renderPage() {
   if (!isAppAuthorized()) {
     ensureAuthGate();
     renderAuthBadge();
-    if (isNetlifyIdentityAvailable() && !authLoginAutoOpened) {
-      authLoginAutoOpened = true;
-      setTimeout(() => {
-        if (!isAppAuthorized()) {
-          window.netlifyIdentity.open('login');
-        }
-      }, 0);
-    }
+    redirectToGoogleLogin();
     return;
   }
 
